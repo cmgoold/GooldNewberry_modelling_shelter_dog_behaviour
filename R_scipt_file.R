@@ -174,20 +174,15 @@ init_list = function(){ # set initial values to help starting model
     }
 
 #=================================================================================
-# run Stan
+# run Stan: will take a few hours for the full data set
 #=================================================================================
 
 startTime = proc.time()
-stan_fitPPP <- stan(file = stanModel, data = stan_data_list, init = init_list,
+stan_fit <- stan(file = stanModel, data = stan_data_list, init = init_list,
                 chains = nChains, warmup = nWarmup, iter = nIter, cores = nCores)
 proc.time() - startTime
 
-# save the stan matrix
-fwrite(as.data.frame(as.matrix(stan_fitPPP)), "stan_fit_full_model_MCMC.csv", row.names = F)
-
-# save the summary results
-capture.output( print(stan_fitPPP , pars = display_params , digits_summary = 4 , probs = c(0.025, 0.975)), 
-                file = "Stan_summary_full_model.csv" )
+print(stan_fit , pars = display_params , digits_summary = 4 , probs = c(0.025, 0.975))
 
 #=================================================================================
 ######################## post-process Stan results ################################# 
@@ -196,7 +191,7 @@ capture.output( print(stan_fitPPP , pars = display_params , digits_summary = 4 ,
 #=================================================================================
 
 # takes a couple of minutes
-post_samples <- as.data.frame(fread("Stan_fit_full_model_MCMC.csv"))
+post_samples <- as.data.frame(stan_fit)
 
 #=================================================================================
 # Calculate WAIC (following McElreath (2015): Statistical Rethinking)
