@@ -140,7 +140,8 @@ stan_data[, c("sex","sourceType","site","neutered")] <- apply(stan_data[,c("sex"
 
 X <- model.matrix( ~ nObsZ + resid_total_daysZ + mean_ageZ + weightZ + sex + sourceType + site + neutered , 
                    data = stan_data , 
-                   contrasts.arg = list(sex = "contr.sum", sourceType = "contr.sum", site = "contr.sum"))[,-1]
+                   contrasts.arg = list(sex = "contr.sum", sourceType = "contr.sum", 
+                                        site = "contr.sum", neutered = "contr.sum"))[,-1]
 
 #=================================================================================
 # Stan data list
