@@ -1,5 +1,5 @@
 #****************************************************************************************
-# R script for: "Modelling personality, plasticity and predictability in shelter dogs"
+# R script for: Goold & Newberry (2017). "Modelling personality, plasticity and predictability in shelter dogs"
 #****************************************************************************************
 
 library(rstan)
