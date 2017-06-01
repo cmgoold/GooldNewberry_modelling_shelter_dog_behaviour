@@ -64,17 +64,17 @@ model{
   for(n in 1:N) {
     real eta;                                   // local parameter for mean-model
     real sigma;                                 // local parameter for sd-model
-    eta = (alpha + v[ID[n],1] + X[n] * Beta1)
+    eta = alpha + v[ID[n],1] + X[n] * Beta1
           + (beta_day[1] + v[ID[n],2] + (X[n] * Beta2)) * day[n]
           + (beta_day[2] + v[ID[n],3] + (X[n] * Beta3)) * day2[n];
-    sigma = delta + v[ID[n],4] + X[n] * Beta4;
+    sigma = exp( delta + v[ID[n],4] + X[n] * Beta4);      // exponential inverse-link
 
     // probability of ordinal category definitions
-    theta[1] = normal_cdf( thresh[1] , eta, exp(sigma) );
+    theta[1] = normal_cdf( thresh[1] , eta, sigma );
     for (l in 2:K){
-      theta[l] = fmax(0, normal_cdf(thresh[l], eta, exp(sigma) ) - normal_cdf(thresh[l-1], eta, exp(sigma)));
+      theta[l] = fmax(0, normal_cdf(thresh[l], eta, sigma ) - normal_cdf(thresh[l-1], eta, sigma));
     }
-    theta[J] = 1 - normal_cdf(thresh[K] , eta, exp(sigma));
+    theta[J] = 1 - normal_cdf(thresh[K] , eta, sigma);
 
   y[n] ~ categorical(theta);
   }
@@ -87,16 +87,16 @@ generated quantities {        // for calculating the log-likelihood
   for(n in 1:N) {
     real eta;
     real sigma;
-    eta = (alpha + v[ID[n],1] + X[n] * Beta1)
+    eta = alpha + v[ID[n],1] + X[n] * Beta1
           + (beta_day[1] + v[ID[n],2] + (X[n] * Beta2)) * day[n]
           + (beta_day[2] + v[ID[n],3] + (X[n] * Beta3)) * day2[n];
-    sigma = exp(delta + v[ID[n],4] + X[n] * Beta4);
+    sigma = exp( delta + v[ID[n],4] + X[n] * Beta4 );  
 
-    theta[1] = normal_cdf( thresh[1] , eta, exp(sigma) );
+    theta[1] = normal_cdf( thresh[1] , eta, sigma );
     for (l in 2:K){
-      theta[l] = fmax(0, normal_cdf(thresh[l], eta, exp(sigma) ) - normal_cdf(thresh[l-1], eta, exp(sigma)));
+      theta[l] = fmax(0, normal_cdf(thresh[l], eta, sigma ) - normal_cdf(thresh[l-1], eta, sigma));
     }
-    theta[J] = 1 - normal_cdf(thresh[K] , eta, exp(sigma));
+    theta[J] = 1 - normal_cdf(thresh[K] , eta, sigma);
 
     // log-likelihood calculation
     log_lik[n] = categorical_lpmf(y[n] | theta );
