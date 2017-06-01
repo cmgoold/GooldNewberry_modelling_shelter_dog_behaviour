@@ -168,7 +168,12 @@ display_params <- c( "alpha", "beta_day", "sigmaID",
 )
 
 #=================================================================================
-# run Stan: will take a few hours for the full data set
+# run Stan: depending on the data set, this could take a long time! 
+# In the data set here, there were ~ 20,000 rows of data (3,263 dogs with varying numbers of data points) 
+# and the model is estimating tens-of-thousands of parameters in the model block.
+
+# It is best to run the model thoroughly on different sized subsets first to get an idea of the 
+# running time, try to optimise the code as much as possible, and then go for a long run of the chains. 
 #=================================================================================
 
 startTime = proc.time()
@@ -177,6 +182,9 @@ stan_fit <- stan(file = stanModel, data = stan_data_list, init = 0,
 proc.time() - startTime
 
 print(stan_fit , pars = display_params , digits_summary = 4 , probs = c(0.025, 0.975))
+
+# Please get in touch (conor.goold@nmbu.no) if you would like the full MCMC output for the paper.
+# It is around 7 GB in size, so putting it on Github is not really possible. 
 
 #=================================================================================
 ######################## post-process Stan results ################################# 
