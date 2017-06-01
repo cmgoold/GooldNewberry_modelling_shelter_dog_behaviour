@@ -67,7 +67,7 @@ model{
     eta = alpha + v[ID[n],1] + X[n] * Beta1
           + (beta_day[1] + v[ID[n],2] + (X[n] * Beta2)) * day[n]
           + (beta_day[2] + v[ID[n],3] + (X[n] * Beta3)) * day2[n];
-    sigma = exp( delta + v[ID[n],4] + X[n] * Beta4);      // exponential inverse-link
+    sigma = exp( delta + v[ID[n],4] + X[n] * Beta4 );      // exponential inverse-link
 
     // probability of ordinal category definitions
     theta[1] = normal_cdf( thresh[1] , eta, sigma );
@@ -90,7 +90,7 @@ generated quantities {        // for calculating the log-likelihood
     eta = alpha + v[ID[n],1] + X[n] * Beta1
           + (beta_day[1] + v[ID[n],2] + (X[n] * Beta2)) * day[n]
           + (beta_day[2] + v[ID[n],3] + (X[n] * Beta3)) * day2[n];
-    sigma = exp( delta + v[ID[n],4] + X[n] * Beta4 );  
+    sigma = exp( delta + v[ID[n],4] + X[n] * Beta4 );
 
     theta[1] = normal_cdf( thresh[1] , eta, sigma );
     for (l in 2:K){
