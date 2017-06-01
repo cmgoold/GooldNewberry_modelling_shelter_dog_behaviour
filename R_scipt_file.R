@@ -460,6 +460,7 @@ ggsave("Fig6.png", last_plot() , width = 10, height = 8)
 # plot random effects
 #=================================================================================
 
+# put random effects into a data frame to use for plotting
 random_effects <- data.frame(id = 1:Nid , 
                              intercept_mu = apply(random_intercepts , 2, median) , 
                              intercept_low95 = apply(random_intercepts , 2, function(z) HPDI(z, 0.95))[1,] ,
