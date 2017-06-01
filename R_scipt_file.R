@@ -8,7 +8,7 @@ options(mc.cores = parallel::detectCores())
 library(ggplot2)
 library(rethinking)
 library(data.table)
-require(MASS)
+library(MASS)
 library(reshape)
 
 # Set the working directory!
@@ -91,7 +91,7 @@ my_data <- read.csv("Raw_sample_data.csv")
 #               // day (day since arrival)
 #               // aggCodes (aggregated behaviour codes used for analysis)
 #               // nObs (number of observations on each dog)
-#               // totalDays (total number of days at the shelter)
+#               // total_days (total number of days at the shelter)
 #               // meanAge (average age in years while at the shelter)
 #               // sex 
 #               // weight (average weight in kg while at the shelter)
@@ -105,7 +105,7 @@ my_data <- read.csv("Raw_sample_data.csv")
 # -- Take the residuals of total_days instead with respect to nObs using a Gamma GLM.
 #=================================================================================
 
-my_data$resid_total_days <- residuals(glm(totalDays+0.00001 ~ nObs , data = my_data , family = Gamma))
+my_data$resid_total_days <- residuals(glm(total_days+0.00001 ~ nObs , data = my_data , family = Gamma))
 
 #=================================================================================
 # Prepare the stan data. First, subset the data if running on smaller models
@@ -165,21 +165,14 @@ display_params <- c( "alpha", "beta_day", "sigmaID",
                      "Beta1" , "Beta2" , "Beta3", "Beta4", 
                      "delta" , "Beta_sigma"  , 
                      "thresh_raw", "thresh"
-                     )
-
-init_list = function(){ # set initial values to help starting model
-  list( delta = 1, alpha = 0, beta_day = rep(0,2) ,
-       Beta1 = rep(0,ncol(X)) , Beta2=rep(0,ncol(X)) ,
-       Beta3=rep(0,ncol(X)), Beta4 = rep(0,ncol(X))
-       )
-    }
+)
 
 #=================================================================================
 # run Stan: will take a few hours for the full data set
 #=================================================================================
 
 startTime = proc.time()
-stan_fit <- stan(file = stanModel, data = stan_data_list, init = init_list,
+stan_fit <- stan(file = stanModel, data = stan_data_list, init = 0,
                 chains = nChains, warmup = nWarmup, iter = nIter, cores = nCores)
 proc.time() - startTime
 
