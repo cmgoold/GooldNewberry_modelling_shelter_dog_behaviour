@@ -192,7 +192,8 @@ print(stan_fit , pars = display_params , digits_summary = 4 , probs = c(0.025, 0
 # NB: Plots of figures are not in the same order as the paper, to allow a clearer workflow
 #=================================================================================
 
-# takes a couple of minutes
+# if loading in a saved MCMC matrix, use fread() from data.table:
+# post_samples <- fread( as.data.frame(my_MCMC_mat.csv) )
 post_samples <- as.data.frame(stan_fit)
 
 #=================================================================================
@@ -218,7 +219,7 @@ full_model_waic <- waic(log_lik = post_samples[,grep("log_lik",colnames(post_sam
                   data_length = nrow(my_data) 
                   )
 
-#===== to save space, the MCMC matrices for other models are not provided.    ===============
+#===== to save space, the MCMC matrices for the models are not provided.    ===============
 #===== But the WAIC_results.csv file contains the WAIC results for all models ===============
 
 waic_compare <- read.csv("WAIC_results.csv")
@@ -270,7 +271,7 @@ chain_length = nrow(post_samples)
 b0 = post_samples[,"alpha"]
 b1 = post_samples[,"beta_day[1]"]
 b2 = post_samples[,"beta_day[2]"]
-sigma = exp(post_samples[,"delta"]) #MeanLN(mu = post_samples[, "delta"], sigma = post_samples[,"sigmaID[4]"])
+sigma = exp(post_samples[,"delta"]) # median of the residual variances on the original scale
 thresh = post_samples[, grep("^thresh", colnames(post_samples))]
 thresh = thresh[,5:9]
 prob_cats <- rep(list(list()),6)
@@ -278,7 +279,7 @@ prob_cats <- rep(list(list()),6)
 prob_cats[[1]] <- sapply(day_seq , 
                      function(x) { 
                        mu <- b0 + b1 * x + b2 * x^2 
-                       prob <- pnorm( (as.numeric(thresh[ , 1]) - mu ) / sigma )
+                       prob <- pnorm( (as.numeric(thresh[ , 1]) - mu ) / sigma )  # this is equation 1 from the paper, effectively 
                        prob
                      }
                      )
@@ -404,7 +405,7 @@ for( i in 1:Nid ) {
                                   function(z) random_intercepts[,i] + random_slopes_linear[,i]*z+random_slopes_quad[,i]*z^2)
 }
 
-#======== if simulated predictions are required, use this data =====================
+#======== if simulated predictions are required, use this code =====================
 # counterfac_sims <- rep(list(list()), Nid)
 # for(i in 1:Nid){
 #   counterfac_sims[[i]] <- sapply(day_seq, 
@@ -427,6 +428,7 @@ counterfac_curves <- data.frame( id = rep(1:Nid, each = length(day_seq)) ,
                                  # sim_hdi_high = unlist(lapply(counterfac_sims, function(z) apply(z,2,function(x)HPDI(x,0.95))[2,])))
                                 )
 
+# sample 20 randomly selected dogs and plot their curves/data
 set.seed(2017)
 sample_dogs <- sample(1:Nid, 20, replace = FALSE )
 sample_data <- counterfac_curves[ counterfac_curves$id %in% sample_dogs, ]
@@ -589,7 +591,7 @@ ICC_df <- data.frame(day_values = c(-1,0,1),
 
 
 #=================================================================================
-# cross-environmental correlations
+# cross-environmental correlations inspired by Brommer (2013)
 #=================================================================================
 
 K <- rep(list(list()), chain_length )
