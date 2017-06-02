@@ -192,7 +192,7 @@ print(stan_fit , pars = display_params , digits_summary = 4 , probs = c(0.025, 0
 # NB: Plots of figures are not in the same order as the paper, to allow a clearer workflow
 #=================================================================================
 
-# if loading in a saved MCMC matrix, use fread() from data.table:
+# if loading in a saved MCMC matrix, use fread() from data.table, e.g.:
 # post_samples <- fread( as.data.frame(my_MCMC_mat.csv) )
 post_samples <- as.data.frame(stan_fit)
 
