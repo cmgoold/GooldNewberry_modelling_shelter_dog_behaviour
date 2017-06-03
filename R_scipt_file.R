@@ -10,6 +10,7 @@ library(rethinking)
 library(data.table)
 library(MASS)
 library(reshape)
+library(agrmt)
 
 # Set the working directory!
 # setwd("")
@@ -81,6 +82,120 @@ ggplot(df_1b, aes(x = x, y = y, group=ID)) +
 
 ggsave("Fig1b.png", last_plot(), width=6, height = 5)
 
+#=================================================================================
+# load the reliability/validity session data
+#=================================================================================
+
+rel_data <- read.csv("Reliability_validity_data.csv")
+
+# compute consensus for each video
+cons = apply(rel_data[,-1] , 2 , FUN= function(x)  consensus(table(x) ))
+
+# function to bootstrap consensus statistic to get 95% CI and find a null distribution and 95% CI
+boot_consensus <- function(variable) { 
+  Nboots <- 10000
+  boot_cons <- null_cons <- numeric(Nboots)
+  for(i in 1:Nboots) { 
+    boot_sample <- sample(variable, length(variable), replace = TRUE)
+    boot_cons[i] = consensus(table(boot_sample))
+    null_sample = sample(unique(variable) , length(variable), replace = TRUE)
+    null_cons[i] = consensus(table(null_sample))
+  }
+  consCI = quantile( boot_cons , probs = c(0.025 , 0.975 ) )
+  nullConsCI = quantile( null_cons , probs = c(0.025 , 0.975 ) )
+  
+  list( AvgConsensus = mean(boot_cons) , ConsensusCI = consCI , 
+        AvgNullConsensus = mean(null_cons), NullConsensusCI = nullConsCI 
+  )
+}
+
+# e.g. for the interacting with people videos
+boot_consensus(rel_data$interacting_people1)
+boot_consensus(rel_data$interacting_people2)
+
+# finally, find the percentage of correct answers/answers of the correct colour
+
+# this requires a bit of reshaping of the data first
+
+l = reshape(rel_data, 
+                      varying = c("food1", "interacting_people1", "outKennel1", "kennel1", "toys1","food2",
+                                  "dogs1","handling1","toys2","outKennel2","kennel2","dogs2","handling2","interacting_people2"), 
+                      v.names = "response",
+                      timevar = "context", 
+                      times = c("food1", "interacting_people1", "outKennel1", "kennel1", "toys1","food2",
+                                "dogs1","handling1","toys2","outKennel2","kennel2","dogs2","handling2","interacting_people2"), 
+                      new.row.names = 1:1302,
+                      direction = "long")
+
+# find correct responses
+l$correctResponse = l$response
+
+l$correctResponse = ifelse(l$context == "food1" & l$response == "RE" , 1 , 
+                           ifelse( l$context == "interacting_people1" & l$response == "RPNA", 1, 
+                                   ifelse(l$context == "outKennel1" & l$response=="UN", 1 , 
+                                          ifelse( l$context=="kennel1" & l$response == "RPNA", 1 , 
+                                                  ifelse(l$context=="toys1" & l$response=="PL", 1, 
+                                                         ifelse(l$context=="food2" & l$response=="NEM", 1, 
+                                                                ifelse(l$context=="dogs1" & l$response=="FOC", 1, 
+                                                                       ifelse(l$context=="handling1" & l$response=="RE", 1, 
+                                                                              ifelse(l$context=="toys2"&l$response=="OS", 1, 
+                                                                                     ifelse(l$context=="outKennel2"& l$response=="FOC", 1, 
+                                                                                            ifelse(l$context=="kennel2" & l$response == "RDA", 1, 
+                                                                                                   ifelse(l$context=="dogs2"&l$response=="IN", 1 , 
+                                                                                                          ifelse(l$context=="handling2"&l$response=="ST",1, 
+                                                                                                                 ifelse(l$context=="interacting_people2"&l$response=="RPA", 1, 0
+                                                                                                                 ))))))))))))))
+
+l$correctRespColour = l$response
+
+l$correctRespColour = ifelse(l$context == "food1" & l$response == "RE" |l$context == "food1" & l$response == "PL" | 
+                               l$context == "food1" &l$response == "NM" |l$context == "food1" &l$response == "NEM" |
+                               l$context == "food1" &l$response == "NET" , 1 , 
+                             ifelse( l$context == "interacting_people1" & l$response == "RPNA" |l$context == "interacting_people1" &l$response == "UAV" |
+                                       l$context == "interacting_people1" &l$response == "SUB+"|l$context == "interacting_people1" &l$response == "UST" |
+                                       l$context == "interacting_people1" &l$response == "ST+" |l$response == "UAP", 1, 
+                                     ifelse(l$context == "outKennel1" & l$response=="UN"|l$context == "outKennel1" &l$response == "RE"|
+                                              l$context == "outKennel1" & l$response == "EX"|l$context == "outKennel1" &l$response == "VO", 1 , 
+                                            ifelse( l$context=="kennel1" & l$response == "RPNA"| l$context=="kennel1" &l$response == "ST+"|
+                                                      l$context=="kennel1" & l$response == "RDNA"|l$context=="kennel1" &l$response == "DEP+", 1 , 
+                                                    ifelse(l$context=="toys1" & l$response=="PL"|l$context=="toys1" & l$response == "RE"|
+                                                             l$context=="toys1" & l$response == "NM", 1, 
+                                                           ifelse(l$context=="food2" & l$response=="NEM"|l$context=="food2" &l$response == "RE" |
+                                                                    l$context=="food2" &l$response == "PL" | 
+                                                                    l$context=="food2" &l$response == "NM" |l$context=="food2" &l$response == "NET" , 1, 
+                                                                  ifelse(l$context=="dogs1" &l$response=="FOC"|l$context=="dogs1" &l$response == "SE"|
+                                                                           l$context=="dogs1" &l$response == "UAV"|l$context=="dogs1" &l$response == "CH"|
+                                                                           l$context=="dogs1" &l$response == "SUB+"|l$context=="dogs1" &l$response == "RDNA"| 
+                                                                           l$context=="dogs1" &l$response == "SE+"|l$context=="dogs1" &l$response == "UAP"|
+                                                                           l$context=="dogs1" &l$response == "PL+", 1, 
+                                                                         ifelse(l$context=="handling1"& l$response=="RE"|l$context=="handling1"&l$response == "EX"|
+                                                                                  l$context=="handling1"&l$response == "SUB"|l$context=="handling1"& l$response == "ST", 1, 
+                                                                                ifelse(l$context=="toys2"&l$response=="OS"|l$context=="toys2"&l$response == "UST+"|
+                                                                                         l$context=="toys2"&l$response == "RPA", 1, 
+                                                                                       ifelse(l$context=="outKennel2"&l$response=="FOC"|l$context=="outKennel2"&l$response == "ST+"|
+                                                                                                l$context=="outKennel2"&l$response == "RPNA"|l$context=="outKennel2"&l$response == "RDNA", 1, 
+                                                                                              ifelse(l$context=="kennel2" & l$response == "RDA"|l$context=="kennel2" & l$response == "ST++"|
+                                                                                                       l$context=="kennel2" & l$response == "RPA", 1, 
+                                                                                                     ifelse(l$context=="dogs2"&l$response=="IN"|l$context=="dogs2"&l$response == "FR"|
+                                                                                                              l$context=="dogs2"&l$response == "PL"|l$context=="dogs2"&l$response == "SUB", 1 , 
+                                                                                                            ifelse(l$context=="handling2"&l$response=="ST"|l$context=="handling2"&l$response == "RE"|
+                                                                                                                     l$context=="handling2"&l$response == "EX"|l$context=="handling2"&l$response == "SUB",1, 
+                                                                                                                   ifelse(l$context=="interacting_people2"&l$response=="RPA"|
+                                                                                                                            l$context=="interacting_people2"&l$response == "OS"|l$context=="interacting_people2"&l$response == "UST+", 1, 0
+                                                                                                                   ))))))))))))))
+
+
+# code correct
+tAll = table( l$correctResponse , l$context )
+percCorrAll = tAll[2,] / ( tAll[1, ] + tAll[2,]) * 100
+percCorrAll
+
+# colour correct
+tAllc = table( l$correctRespColour , l$context )
+percCorrAllc = tAllc[2,] / ( tAllc[1, ] + tAllc[2,]) * 100
+percCorrAllc
+
+#*********************************************************************************
 #=================================================================================
 # load the raw sample data on dog's longitudinal behaviour
 #=================================================================================
