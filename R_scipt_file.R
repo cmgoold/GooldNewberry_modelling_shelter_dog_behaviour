@@ -1,5 +1,5 @@
 #****************************************************************************************
-# R script for: Goold & Newberry (2017). "Modelling personality, plasticity and predictability in shelter dogs"
+# R script for: "Modelling personality, plasticity and predictability in shelter dogs"
 #****************************************************************************************
 
 library(rstan)
@@ -8,194 +8,12 @@ options(mc.cores = parallel::detectCores())
 library(ggplot2)
 library(rethinking)
 library(data.table)
-library(MASS)
+require(MASS)
 library(reshape)
-library(agrmt)
 
 # Set the working directory!
 # setwd("")
 
-#=================================================================================
-# Create figure 1
-#=================================================================================
-
-# simulate 100 individuals' reaction norms; correlation of 0.4 between 5 successive time points
-Nid <- 100
-set.seed(2017)
-out <- mvrnorm(Nid, 
-               mu = c(0,0,0,0,0), 
-               Sigma = matrix(c(1,rep(0.4,4),
-                                0.4,1,rep(0.4,3),
-                                0.4,0.4,1,rep(0.4,2),
-                                rep(0.4,3),1,0.4,
-                                rep(0.4,4),1), ncol = 5), empirical = TRUE)
-
-id = c(1:Nid)
-
-out <- as.matrix(cbind(out, id))
-colnames(out) <- c(1:5, "id")
-
-outL = melt(out, id.vars=c("id"))   # long data format
-outL = outL[-c((nrow(outL)-(Nid-1)):nrow(outL)), ]
-
-df = outL[with(outL, order(X1)),]
-colnames(df) <- c("ID","x","y")
-rownames(df) <- 1:nrow(df)
-df$ID = as.factor(df$ID)
-
-df_1a <- df
-
-ggplot(df_1a, aes(x = x, y = y, group=ID)) +
-  geom_smooth(method="lm", se=FALSE, colour="black", lwd=0.5) +
-  xlab("\nRepeated measurements") + 
-  ylab("Behaviour\n") +
-  theme_bw() +
-  theme(panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        axis.text.x=element_text(size=15, colour="black"),
-        axis.text.y=element_text(size=15, colour="black"),
-        axis.title.x=element_text(size=20, colour="black"),
-        axis.title.y=element_text(size=20, colour="black"),
-        legend.position = "none")
-
-ggsave("Fig1a.png", last_plot(), width = 6, height = 5)
-
-set.seed(123)
-df_1b <- df[df$ID %in% sample(1:Nid, 4, replace=F),]
-df_1b$ID <- rep(1:4, each=5)
-
-ggplot(df_1b, aes(x = x, y = y, group=ID)) +
-  geom_point() + 
-  geom_smooth(method="lm", se=TRUE, colour="black", lwd=0.5) +
-  facet_wrap(~ ID) + 
-  xlab("\nRepeated measurements") + 
-  ylab("Behaviour\n") +
-  theme_bw() +
-  theme(strip.text = element_blank(), 
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        axis.text.x=element_text(size=15, colour="black"),
-        axis.text.y=element_text(size=15, colour="black"),
-        axis.title.x=element_text(size=20, colour="black"),
-        axis.title.y=element_text(size=20, colour="black"),
-        legend.position = "none")
-
-ggsave("Fig1b.png", last_plot(), width=6, height = 5)
-
-#=================================================================================
-# load the reliability/validity session data
-#=================================================================================
-
-rel_data <- read.csv("Reliability_validity_data.csv")
-
-# compute consensus for each video
-cons = apply(rel_data[,-1] , 2 , FUN= function(x)  consensus(table(x) ))
-
-# function to bootstrap consensus statistic to get 95% CI and find a null distribution and 95% CI
-boot_consensus <- function(variable) { 
-  Nboots <- 10000
-  boot_cons <- null_cons <- numeric(Nboots)
-  for(i in 1:Nboots) { 
-    boot_sample <- sample(variable, length(variable), replace = TRUE)
-    boot_cons[i] = consensus(table(boot_sample))
-    null_sample = sample(unique(variable) , length(variable), replace = TRUE)
-    null_cons[i] = consensus(table(null_sample))
-  }
-  consCI = quantile( boot_cons , probs = c(0.025 , 0.975 ) )
-  nullConsCI = quantile( null_cons , probs = c(0.025 , 0.975 ) )
-  
-  list( AvgConsensus = mean(boot_cons) , ConsensusCI = consCI , 
-        AvgNullConsensus = mean(null_cons), NullConsensusCI = nullConsCI 
-  )
-}
-
-# e.g. for the interacting with people videos
-boot_consensus(rel_data$interacting_people1)
-boot_consensus(rel_data$interacting_people2)
-
-# finally, find the percentage of correct answers/answers of the correct colour
-
-# this requires a bit of reshaping of the data first
-
-l = reshape(rel_data, 
-                      varying = c("food1", "interacting_people1", "outKennel1", "kennel1", "toys1","food2",
-                                  "dogs1","handling1","toys2","outKennel2","kennel2","dogs2","handling2","interacting_people2"), 
-                      v.names = "response",
-                      timevar = "context", 
-                      times = c("food1", "interacting_people1", "outKennel1", "kennel1", "toys1","food2",
-                                "dogs1","handling1","toys2","outKennel2","kennel2","dogs2","handling2","interacting_people2"), 
-                      new.row.names = 1:1302,
-                      direction = "long")
-
-# find correct responses
-l$correctResponse = l$response
-
-l$correctResponse = ifelse(l$context == "food1" & l$response == "RE" , 1 , 
-                           ifelse( l$context == "interacting_people1" & l$response == "RPNA", 1, 
-                                   ifelse(l$context == "outKennel1" & l$response=="UN", 1 , 
-                                          ifelse( l$context=="kennel1" & l$response == "RPNA", 1 , 
-                                                  ifelse(l$context=="toys1" & l$response=="PL", 1, 
-                                                         ifelse(l$context=="food2" & l$response=="NEM", 1, 
-                                                                ifelse(l$context=="dogs1" & l$response=="FOC", 1, 
-                                                                       ifelse(l$context=="handling1" & l$response=="RE", 1, 
-                                                                              ifelse(l$context=="toys2"&l$response=="OS", 1, 
-                                                                                     ifelse(l$context=="outKennel2"& l$response=="FOC", 1, 
-                                                                                            ifelse(l$context=="kennel2" & l$response == "RDA", 1, 
-                                                                                                   ifelse(l$context=="dogs2"&l$response=="IN", 1 , 
-                                                                                                          ifelse(l$context=="handling2"&l$response=="ST",1, 
-                                                                                                                 ifelse(l$context=="interacting_people2"&l$response=="RPA", 1, 0
-                                                                                                                 ))))))))))))))
-
-l$correctRespColour = l$response
-
-l$correctRespColour = ifelse(l$context == "food1" & l$response == "RE" |l$context == "food1" & l$response == "PL" | 
-                               l$context == "food1" &l$response == "NM" |l$context == "food1" &l$response == "NEM" |
-                               l$context == "food1" &l$response == "NET" , 1 , 
-                             ifelse( l$context == "interacting_people1" & l$response == "RPNA" |l$context == "interacting_people1" &l$response == "UAV" |
-                                       l$context == "interacting_people1" &l$response == "SUB+"|l$context == "interacting_people1" &l$response == "UST" |
-                                       l$context == "interacting_people1" &l$response == "ST+" |l$response == "UAP", 1, 
-                                     ifelse(l$context == "outKennel1" & l$response=="UN"|l$context == "outKennel1" &l$response == "RE"|
-                                              l$context == "outKennel1" & l$response == "EX"|l$context == "outKennel1" &l$response == "VO", 1 , 
-                                            ifelse( l$context=="kennel1" & l$response == "RPNA"| l$context=="kennel1" &l$response == "ST+"|
-                                                      l$context=="kennel1" & l$response == "RDNA"|l$context=="kennel1" &l$response == "DEP+", 1 , 
-                                                    ifelse(l$context=="toys1" & l$response=="PL"|l$context=="toys1" & l$response == "RE"|
-                                                             l$context=="toys1" & l$response == "NM", 1, 
-                                                           ifelse(l$context=="food2" & l$response=="NEM"|l$context=="food2" &l$response == "RE" |
-                                                                    l$context=="food2" &l$response == "PL" | 
-                                                                    l$context=="food2" &l$response == "NM" |l$context=="food2" &l$response == "NET" , 1, 
-                                                                  ifelse(l$context=="dogs1" &l$response=="FOC"|l$context=="dogs1" &l$response == "SE"|
-                                                                           l$context=="dogs1" &l$response == "UAV"|l$context=="dogs1" &l$response == "CH"|
-                                                                           l$context=="dogs1" &l$response == "SUB+"|l$context=="dogs1" &l$response == "RDNA"| 
-                                                                           l$context=="dogs1" &l$response == "SE+"|l$context=="dogs1" &l$response == "UAP"|
-                                                                           l$context=="dogs1" &l$response == "PL+", 1, 
-                                                                         ifelse(l$context=="handling1"& l$response=="RE"|l$context=="handling1"&l$response == "EX"|
-                                                                                  l$context=="handling1"&l$response == "SUB"|l$context=="handling1"& l$response == "ST", 1, 
-                                                                                ifelse(l$context=="toys2"&l$response=="OS"|l$context=="toys2"&l$response == "UST+"|
-                                                                                         l$context=="toys2"&l$response == "RPA", 1, 
-                                                                                       ifelse(l$context=="outKennel2"&l$response=="FOC"|l$context=="outKennel2"&l$response == "ST+"|
-                                                                                                l$context=="outKennel2"&l$response == "RPNA"|l$context=="outKennel2"&l$response == "RDNA", 1, 
-                                                                                              ifelse(l$context=="kennel2" & l$response == "RDA"|l$context=="kennel2" & l$response == "ST++"|
-                                                                                                       l$context=="kennel2" & l$response == "RPA", 1, 
-                                                                                                     ifelse(l$context=="dogs2"&l$response=="IN"|l$context=="dogs2"&l$response == "FR"|
-                                                                                                              l$context=="dogs2"&l$response == "PL"|l$context=="dogs2"&l$response == "SUB", 1 , 
-                                                                                                            ifelse(l$context=="handling2"&l$response=="ST"|l$context=="handling2"&l$response == "RE"|
-                                                                                                                     l$context=="handling2"&l$response == "EX"|l$context=="handling2"&l$response == "SUB",1, 
-                                                                                                                   ifelse(l$context=="interacting_people2"&l$response=="RPA"|
-                                                                                                                            l$context=="interacting_people2"&l$response == "OS"|l$context=="interacting_people2"&l$response == "UST+", 1, 0
-                                                                                                                   ))))))))))))))
-
-
-# code correct
-tAll = table( l$correctResponse , l$context )
-percCorrAll = tAll[2,] / ( tAll[1, ] + tAll[2,]) * 100
-percCorrAll
-
-# colour correct
-tAllc = table( l$correctRespColour , l$context )
-percCorrAllc = tAllc[2,] / ( tAllc[1, ] + tAllc[2,]) * 100
-percCorrAllc
-
-#*********************************************************************************
 #=================================================================================
 # load the raw sample data on dog's longitudinal behaviour
 #=================================================================================
@@ -206,7 +24,7 @@ my_data <- read.csv("Raw_sample_data.csv")
 #               // day (day since arrival)
 #               // aggCodes (aggregated behaviour codes used for analysis)
 #               // nObs (number of observations on each dog)
-#               // total_days (total number of days at the shelter)
+#               // totalDays (total number of days at the shelter)
 #               // meanAge (average age in years while at the shelter)
 #               // sex 
 #               // weight (average weight in kg while at the shelter)
@@ -220,7 +38,7 @@ my_data <- read.csv("Raw_sample_data.csv")
 # -- Take the residuals of total_days instead with respect to nObs using a Gamma GLM.
 #=================================================================================
 
-my_data$resid_total_days <- residuals(glm(total_days+0.00001 ~ nObs , data = my_data , family = Gamma))
+my_data$resid_total_days <- residuals(glm(totalDays+0.00001 ~ nObs , data = my_data , family = Gamma))
 
 #=================================================================================
 # Prepare the stan data. First, subset the data if running on smaller models
@@ -255,8 +73,7 @@ stan_data[, c("sex","sourceType","site","neutered")] <- apply(stan_data[,c("sex"
 
 X <- model.matrix( ~ nObsZ + resid_total_daysZ + mean_ageZ + weightZ + sex + sourceType + site + neutered , 
                    data = stan_data , 
-                   contrasts.arg = list(sex = "contr.sum", sourceType = "contr.sum", 
-                                        site = "contr.sum", neutered = "contr.sum"))[,-1]
+                   contrasts.arg = list(sex = "contr.sum", sourceType = "contr.sum", site = "contr.sum"))[,-1]
 
 #=================================================================================
 # Stan data list
@@ -280,26 +97,25 @@ display_params <- c( "alpha", "beta_day", "sigmaID",
                      "Beta1" , "Beta2" , "Beta3", "Beta4", 
                      "delta" , "Beta_sigma"  , 
                      "thresh_raw", "thresh"
-)
+                     )
+
+init_list = function(){ # set initial values to help starting model
+  list( delta = 1, alpha = 0, beta_day = rep(0,2) ,
+       Beta1 = rep(0,ncol(X)) , Beta2=rep(0,ncol(X)) ,
+       Beta3=rep(0,ncol(X)), Beta4 = rep(0,ncol(X))
+       )
+    }
 
 #=================================================================================
-# run Stan: depending on the data set, this could take a long time! 
-# In the data set here, there were ~ 20,000 rows of data (3,263 dogs with varying numbers of data points) 
-# and the model is estimating tens-of-thousands of parameters in the model block.
-
-# It is best to run the model thoroughly on different sized subsets first to get an idea of the 
-# running time, try to optimise the code as much as possible, and then go for a long run of the chains. 
+# run Stan: will take a few hours for the full data set
 #=================================================================================
 
 startTime = proc.time()
-stan_fit <- stan(file = stanModel, data = stan_data_list, init = 0,
+stan_fit <- stan(file = stanModel, data = stan_data_list, init = init_list,
                 chains = nChains, warmup = nWarmup, iter = nIter, cores = nCores)
 proc.time() - startTime
 
 print(stan_fit , pars = display_params , digits_summary = 4 , probs = c(0.025, 0.975))
-
-# Please get in touch (conor.goold@nmbu.no) if you would like the full MCMC output for the paper.
-# It is around 7 GB in size, so putting it on Github is not really possible. 
 
 #=================================================================================
 ######################## post-process Stan results ################################# 
@@ -307,8 +123,7 @@ print(stan_fit , pars = display_params , digits_summary = 4 , probs = c(0.025, 0
 # NB: Plots of figures are not in the same order as the paper, to allow a clearer workflow
 #=================================================================================
 
-# if loading in a saved MCMC matrix, use fread() from data.table, e.g.:
-# post_samples <- fread( as.data.frame(my_MCMC_mat.csv) )
+# takes a couple of minutes
 post_samples <- as.data.frame(stan_fit)
 
 #=================================================================================
@@ -334,7 +149,7 @@ full_model_waic <- waic(log_lik = post_samples[,grep("log_lik",colnames(post_sam
                   data_length = nrow(my_data) 
                   )
 
-#===== to save space, the MCMC matrices for the models are not provided.    ===============
+#===== to save space, the MCMC matrices for other models are not provided.    ===============
 #===== But the WAIC_results.csv file contains the WAIC results for all models ===============
 
 waic_compare <- read.csv("WAIC_results.csv")
@@ -351,7 +166,7 @@ ggplot(waic_compare, aes(x = model, y = WAIC) ) +
         axis.title = element_text(colour="black", size=20)) +
   coord_flip()
 
-ggsave(filename = "Fig2.png", last_plot(), width = 6, height = 3)
+ggsave(filename = "Fig1.png", last_plot(), width = 6, height = 3)
 
 #=================================================================================
 # Some functions for transforming log-normal parameters to original scales and a mode function
@@ -386,7 +201,7 @@ chain_length = nrow(post_samples)
 b0 = post_samples[,"alpha"]
 b1 = post_samples[,"beta_day[1]"]
 b2 = post_samples[,"beta_day[2]"]
-sigma = exp(post_samples[,"delta"]) # median of the residual variances on the original scale
+sigma = exp(post_samples[,"delta"]) #MeanLN(mu = post_samples[, "delta"], sigma = post_samples[,"sigmaID[4]"])
 thresh = post_samples[, grep("^thresh", colnames(post_samples))]
 thresh = thresh[,5:9]
 prob_cats <- rep(list(list()),6)
@@ -394,7 +209,7 @@ prob_cats <- rep(list(list()),6)
 prob_cats[[1]] <- sapply(day_seq , 
                      function(x) { 
                        mu <- b0 + b1 * x + b2 * x^2 
-                       prob <- pnorm( (as.numeric(thresh[ , 1]) - mu ) / sigma )  # this is equation 1 from the paper, effectively 
+                       prob <- pnorm( (as.numeric(thresh[ , 1]) - mu ) / sigma )
                        prob
                      }
                      )
@@ -419,7 +234,7 @@ prob_cats[[6]] <- sapply(day_seq ,
                          }
 )
 
-png(filename = "Fig3a.png", width=1500, height = 1200, res = 200)
+png(filename = "Fig2a.png", width=1500, height = 1200, res = 200)
 par(mar=c(4.5,4.5,1,1))
 plot( x = seq(0,30,1), y = seq(0,1,length.out = 31), type="n" , 
       xlab = "Day since arrival", ylab = "Probability of sociability code", 
@@ -431,7 +246,6 @@ for( i in 1:6 ){
   shade( apply(prob_cats[[i]],2,function(z) HPDI(z,0.95)), seq(0,30,1))
 }
 dev.off()
-
 
 #=================================================================================
 # plot average day ~ behaviour and individual curves 
@@ -447,8 +261,8 @@ plot( jitter(aggCodes) ~ jitter(dayZ), data = stan_data ,
       col = col.alpha("black", 0.1), ylim = c(0,6.5),
       xlab = "Day since arrival", ylab = "Sociability score",
       cex.axis = 1, cex.lab = 1.5)
-lines( day_seq , pred_mu, lwd = 3)
-shade( pred_hdi, day_seq)
+lines( day_seq , pred_mu, lwd = 3 )
+shade( pred_hdi , day_seq )
 
 # arrange random effects to prepare for plotting
 random_intercepts <- post_samples[,"alpha"] + 
@@ -493,7 +307,7 @@ individual_curves <- data.frame( id = stan_data$id,
                                  )
 
 # plot all curves over the raw data
-png(filename = "Fig3b.png", width=1500, height=1200, res=200)
+png(filename = "Fig2b.png", width=1500, height=1200, res=200)
 par(mar=c(4,4.5,2,1))
 plot( jitter(aggCodes) ~ dayZ, data = stan_data , 
       type="n", xaxt = "n" , 
@@ -520,7 +334,7 @@ for( i in 1:Nid ) {
                                   function(z) random_intercepts[,i] + random_slopes_linear[,i]*z+random_slopes_quad[,i]*z^2)
 }
 
-#======== if simulated predictions are required, use this code =====================
+#======== if simulated predictions are required, use this data =====================
 # counterfac_sims <- rep(list(list()), Nid)
 # for(i in 1:Nid){
 #   counterfac_sims[[i]] <- sapply(day_seq, 
@@ -543,7 +357,6 @@ counterfac_curves <- data.frame( id = rep(1:Nid, each = length(day_seq)) ,
                                  # sim_hdi_high = unlist(lapply(counterfac_sims, function(z) apply(z,2,function(x)HPDI(x,0.95))[2,])))
                                 )
 
-# sample 20 randomly selected dogs and plot their curves/data
 set.seed(2017)
 sample_dogs <- sample(1:Nid, 20, replace = FALSE )
 sample_data <- counterfac_curves[ counterfac_curves$id %in% sample_dogs, ]
@@ -569,13 +382,12 @@ ggplot( raw_data , aes(x = day , y = aggCodes) ) +
          axis.text.y = element_text(colour ="black", size=15),
          axis.title = element_text(colour = "black", size=20) )
 
-ggsave("Fig6.png", last_plot() , width = 10, height = 8)
+ggsave("Fig5.png", last_plot() , width = 10, height = 8)
 
 #=================================================================================
 # plot random effects
 #=================================================================================
 
-# put random effects into a data frame to use for plotting
 random_effects <- data.frame(id = 1:Nid , 
                              intercept_mu = apply(random_intercepts , 2, median) , 
                              intercept_low95 = apply(random_intercepts , 2, function(z) HPDI(z, 0.95))[1,] ,
@@ -613,7 +425,7 @@ ggplot( random_effects , aes( x = id , y = intercept_mu )) +
          ) + 
   coord_flip()
 
-ggsave("Fig4a.png", last_plot() , width=7, height=7)
+ggsave("Fig3a.png", last_plot() , width=7, height=7)
 
 ggplot( random_effects , aes( x = id , y = lin_slope_mu )) + 
   geom_errorbar(aes(x = id , ymin = lin_slope_low95 , ymax = lin_slope_high95), 
@@ -631,7 +443,7 @@ ggplot( random_effects , aes( x = id , y = lin_slope_mu )) +
   ) + 
   coord_flip()
 
-ggsave("Fig4b.png", last_plot() , width=7, height=7)
+ggsave("Fig3b.png", last_plot() , width=7, height=7)
 
 ggplot( random_effects , aes( x = id , y = quad_slope_mu )) + 
   geom_errorbar(aes(x = id , ymin = quad_slope_low95 , ymax = quad_slope_high95), 
@@ -649,7 +461,7 @@ ggplot( random_effects , aes( x = id , y = quad_slope_mu )) +
   ) +
   coord_flip()
 
-ggsave("Fig4c.png", last_plot() , width=7, height=7)
+ggsave("Fig3c.png", last_plot() , width=7, height=7)
 
 ggplot( random_effects , aes( x = id , y = scale_mu )) + 
   geom_errorbar(aes(x = id , ymin = scale_low95 , ymax = scale_high95), 
@@ -668,7 +480,7 @@ ggplot( random_effects , aes( x = id , y = scale_mu )) +
   ) + 
   coord_flip()
 
-ggsave("Fig4d.png", last_plot() , width=7, height=7)
+ggsave("Fig3d.png", last_plot() , width=7, height=7)
 
 #=================================================================================
 # calculate ICC by day
@@ -686,14 +498,14 @@ cov_res_int_slope = res_sd*post_samples[,"Rho[4,1]"]*post_samples[,"sigmaID[1]"]
 cov_res_lin_slope = res_sd*post_samples[,"Rho[4,2]"]*post_samples[,"sigmaID[2]"]
 cov_res_quad_slope = res_sd*post_samples[,"Rho[4,3]"]*post_samples[,"sigmaID[3]"]
 
-day_values <- c(-1,0,1)
+day_values <- c( -1 , 0 , 1 )
 
 ICC_by_day <- sapply(day_values, 
                      function(x) { 
                        x <- x
                        x2 <- x^2
                        numerator <- int_sd^2 + (2*cov_int_lin_slope*x) + (lin_slope_sd^2)*(x^2) +
-                         (2*cov_int_quad_slope*(x2)) + (quad_slope_sd^2)*(x2^2) 
+                         (2*cov_int_quad_slope*(x2)) + (quad_slope_sd^2)*(x2^2) + (2*cov_lin_quad_slopes*x*x2) 
                        denominator <- numerator + res_sd^2 
                        numerator/denominator
                      }
@@ -707,7 +519,7 @@ ICC_df <- data.frame(day_values = c(-1,0,1),
 
 
 #=================================================================================
-# cross-environmental correlations inspired by Brommer (2013)
+# cross-environmental correlations
 #=================================================================================
 
 K <- rep(list(list()), chain_length )
@@ -769,7 +581,7 @@ ggplot(pred_df , aes(x = day, y = aggCodes)) +
          axis.text.y = element_text(colour ="black", size=13),
          axis.title = element_text(colour = "black", size=20) )
 
-ggsave("Fig5.png", last_plot() , width = 10, height=5)
+ggsave("Fig4.png", last_plot() , width = 10, height=5)
 
 
 #=========================== end =====================================
